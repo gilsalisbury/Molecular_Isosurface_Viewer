@@ -1,0 +1,228 @@
+<!DOCTYPE html> 
+<html> 
+	<head> 
+    <meta http-equiv="Content-Type" content="text/html;charset=utf-8" >
+		<title></title> 
+		<style type="text/css">
+			html, body {
+				width: 100%;
+			}
+			html, body, canvas {
+				background: black;
+			}
+			div.container {
+				width: 1000px;
+				margin: auto;
+			}
+			canvas {
+				width: 1000px;
+				height: 600px;
+				margin: 30px auto;
+			}
+		</style>
+        
+    <script id="shader-vs" type="x-shader/x-vertex">
+        attribute vec3 position;
+        attribute vec3 normal;
+        uniform vec4 color;
+        
+        uniform mat4 viewMatrix;
+        uniform mat4 inverseView;
+        uniform mat4 projectionMatrix;
+        uniform mat4 projectionInverse;
+        uniform mat4 normalMatrix;
+
+        uniform bool enableLighting;
+        uniform vec3 ambientColor;
+        uniform vec3 directionalColor;
+        uniform vec3 lightingDirection;
+        uniform vec3 viewerPosition;
+        
+        varying vec3 norm;
+        varying vec4 vnormal;
+        varying vec4 vposition;
+        varying vec4 vp;
+        varying vec4 pos;
+        varying vec4 vreflect;
+        //varying vec3 lightWeighting;
+
+        vec4 transformedNormal;
+
+        
+        void main(void) {
+        
+          if(!enableLighting) {
+            //lightWeighting = vec3(1.0, 1.0, 1.0);
+          } else {
+            transformedNormal = normalMatrix * vec4(normal, 1.0);
+            //float directionalLightWeighting = max(dot(transformedNormal.xyz, lightingDirection), 0.0);
+
+            //vec3 reflection = reflect(lightingDirection, transformedNormal.xyz);
+            //float specular_weight = max(dot(vec3(0,0,-1), reflection), 0.0);
+            //specular_weight = pow(specular_weight, 9.00);
+            //lightWeighting = ambientColor + directionalColor * directionalLightWeighting + specular_weight * directionalLightWeighting;
+          }
+          
+          //vcolor = color;
+
+          vp = normalize(projectionMatrix * viewMatrix * vec4( viewerPosition , 1.0 ));
+          vec4 vn = normalize(projectionMatrix * viewMatrix * vec4( normal , 1.0 ));
+          norm = normal;
+          vnormal = normalize(transformedNormal);
+          vposition = vec4(position, 1.0);
+          pos = vec4(position, 1.0);
+          
+          gl_Position = projectionMatrix * viewMatrix * vec4( position, 1.0 );
+          vreflect = projectionMatrix *  vec4(reflect(position.xyz - viewerPosition.xyz, normal.xyz), 1);
+        
+        }
+		</script>
+
+    <script id="shader-fs" type="x-shader/x-fragment">
+          #ifdef GL_ES
+          precision highp float;
+          #endif
+          
+          uniform mat4 projectionInverse;
+          uniform mat4 projectionMatrix;
+          uniform mat4 inverseView;
+
+          uniform vec4 color;
+          uniform   sampler2D tex;
+          uniform   sampler2D tex0;
+          uniform   sampler2D tex1;
+          uniform   sampler2D tex2;
+          uniform   sampler2D tex3;
+          uniform   sampler2D tex4;
+          uniform   sampler2D tex5;
+
+          uniform   samplerCube cubeMap;
+
+          uniform bool enableLighting;
+          uniform bool enableFloorTexture;
+          uniform vec3 grid;
+          uniform vec3 ambientColor;
+          uniform vec3 directionalColor;
+          uniform vec3 lightingDirection;
+          
+          varying vec4 pos;
+          varying vec4 vnormal;
+          varying vec4 vposition;
+          varying vec3 norm;
+          varying vec4 vp;
+          varying vec4 vreflect;
+          vec3 lightWeighting;
+          
+          void main(){
+          
+            
+            float directionalLightWeighting = max(dot(vnormal.xyz, normalize(lightingDirection)), 0.0);
+            vec3 reflection = reflect(lightingDirection, vnormal.xyz);
+            float specular_weight = max(dot(vp.xyz, reflection), 0.0);
+            specular_weight = pow(specular_weight, 9.00);
+            lightWeighting = ambientColor + directionalColor * directionalLightWeighting + specular_weight * directionalLightWeighting;
+
+            if (!enableFloorTexture) {
+              //reflection = normalize(reflect(pos.xyz, vnormal.xyz));
+              reflection = normalize(vreflect.xyz);
+
+              //if (reflection.y < 0.0 && vnormal.y == 0.0) {
+              float max = max(max(abs(reflection.x), abs(reflection.y)), abs(reflection.z));
+              if (max == abs(reflection.y)) {
+                  if (reflection.y > 0.0) 
+                      gl_FragColor = //vec4(color.rgb * lightWeighting, vnormal.a) +
+                            texture2D(tex1, vec2((.5 + reflection.x/2.0), (.5 + reflection.z/2.0)));
+                  else gl_FragColor = //vec4(color.rgb * lightWeighting, vnormal.a) +
+                            texture2D(tex4, vec2((.5 + reflection.x/2.0), -(.5 + reflection.z/2.0)));
+              }else if (max == abs(reflection.x)) {
+                  if (reflection.x > 0.0) 
+                      gl_FragColor = //vec4(color.rgb * lightWeighting, vnormal.a) +
+                            texture2D(tex0, vec2(-(.5 + reflection.z/2.0), -(.5 + reflection.y/2.0)));
+                   
+                  else gl_FragColor = //vec4(color.rgb * lightWeighting, vnormal.a) +
+                            texture2D(tex3, vec2((.5 + reflection.z/2.0), -(.5 + reflection.y/2.0)));
+              }
+              else if (max == abs(reflection.z)) {
+                  if (reflection.z > 0.0) 
+                      gl_FragColor = //vec4(color.rgb * lightWeighting, vnormal.a) +
+                            texture2D(tex2, vec2((.5 + reflection.x/2.0), -(.5 + reflection.y/2.0)));
+                  else gl_FragColor = //vec4(color.rgb * lightWeighting, vnormal.a) +
+                            texture2D(tex5, vec2((.5 + reflection.x/2.0), -(.5 + reflection.y/2.0)));
+              }
+              //gl_FragColor = vec4(color.rgb * lightWeighting, vnormal.a) +
+                  //texture2D(tex, vec2(vposition.x/160.0 + vnormal.x/16.0, vposition.x/160.0  + vnormal.z/16.0))/3.0;
+                //  texture2D(tex0, vec2(reflection.z/16.0, reflection.x/16.0))/.50;
+              //}else gl_FragColor = vec4(color.rgb * lightWeighting, vnormal.a);
+              
+              //gl_FragColor = vec4(reflection.xyz,1.0);//textureCube(cubeMap, -vnormal.xyz);
+              
+              //gl_FragColor = vec4 (1.0, 1.0, 1.0, 1.0 );
+              
+            }else{ 
+              if (norm.y == 1.0) gl_FragColor = texture2D(tex4, vec2((.5 + vposition.x/(2.0*grid.x)), (.5 + vposition.z/(2.0*grid.z))));
+              else if (norm.y == -1.0) gl_FragColor = texture2D(tex1, vec2((.5 + vposition.x/(2.0*grid.x)), -(.5 + vposition.z/(2.0*grid.z))));
+              else if (norm.x == 1.0) gl_FragColor =  texture2D(tex0, vec2((.5 + vposition.z/(2.0*grid.z)), -(.5 + vposition.y/(2.0*grid.y))));
+              else if (norm.x == -1.0) gl_FragColor = texture2D(tex3, vec2(-(.5 + vposition.z/(2.0*grid.z)), -(.5 + vposition.y/(2.0*grid.y))));
+              else if (norm.z == 1.0) gl_FragColor = texture2D(tex2, vec2((.5 + vposition.x/(2.0*grid.x)), -(.5 + vposition.y/(2.0*grid.y))));
+              else if (norm.z == -1.0) gl_FragColor = texture2D(tex5, vec2(-(.5 + vposition.x/(2.0*grid.x)), -(.5 + vposition.y/(2.0*grid.y))));
+            }
+          
+          }
+    </script>
+
+
+
+        <!-- Stuff pulled from ThreeJS -->
+
+
+
+    <script type="text/javascript" src="jquery.min.js"></script>
+    <script type="text/javascript" src="jquery-ui.min.js"></script>
+   
+
+
+
+
+    <script type="text/javascript" src="THREE.min.js"></script>
+    <!--<script type="text/javascript" src="three.js/Three.js"></script> -->
+		<script type="text/javascript" src="three.js/core/Vector3.js"></script>
+		<script type="text/javascript" src="three.js/core/Vector4.js"></script>
+		<script type="text/javascript" src="three.js/core/Matrix4.js"></script>
+    <script type="text/javascript" src="three.js/core/Geometry.js"></script>
+		<script type="text/javascript" src="three.js/cameras/Camera.js"></script>
+  
+   
+        <!-- Model (Grid, Balls) Workers and WebGL methods -->
+
+		<script type="text/javascript" src="Grid.js"></script>
+		<script type="text/javascript" src="Balls.js"></script>
+		<script type="text/javascript" src="WebGLUtils.js"></script>
+		<script type="text/javascript" src="WorkerGroup.js"></script>
+    <script type="text/javascript" src="cubes.js"></script>
+        <!-- The Example -->
+        
+	</head> 
+	<body onload="load();"> 
+		<div class="container">
+		<canvas id="viz" width="1200" height="800"></canvas> 
+    <div style="color:white; text-align:center; float:left;" > Isovalue </br><input id = "iso" type="range" min=".01" max = "100.0" value="50" style = "background-color:white; position:relative"/></div>
+
+    <div style="color:white; text-align:center; float:left;" >Resistance</br><input id = "energy" type="range" min=".001" max = "4000" value="800" style = "background-color:white;"/> </div>
+    <div style="color:white; text-align:center; float:left;" >Radius of Travel</br><input id = "radius" type="range" min=".4" max = "30" value=".6" style = "background-color:white;"/></div>
+    <div style="color:white; text-align:center; float:left;" >Grid Increment</br><input id = "step" type="range" min="1.0" max = "200.0" value="60" style = "background-color:white;"/></div>
+    <div style="color:white; text-align:center; float:left;">Norepinephrine</br><input id="epi" checked type="checkbox" style= "background-color:white;"/></div>
+    <div style="color:white; text-align:center; float:left; padding-left:10px;"> GTP</br><input id="gtp" type="checkbox" style= "background-color:white;"/></div>
+    <div style="color:white; text-align:center; float:left; padding-left:10px;"> Caffine</br><input id="caf" type="checkbox" style= "background-color:white;"/></div>
+
+  
+    <img src="check.png" id="tiger" style="visibility:hidden; height:0px;">
+    <img src="Storforsen/posx.png" id="posx" style="visibility:hidden; height:0px;">
+    <img src="Storforsen/posy.png" id="posy" style="visibility:hidden; height:0px;">
+    <img src="Storforsen/posz.png" id="posz" style="visibility:hidden; height:0px;">
+    <img src="Storforsen/negx.png" id="negx" style="visibility:hidden; height:0px;">
+    <img src="Storforsen/negy.png" id="negy" style="visibility:hidden; height:0px;">
+    <img src="Storforsen/negz.png" id="negz" style="visibility:hidden; height:0px;">
+		</div>
+	</body> 
+</html>
+
